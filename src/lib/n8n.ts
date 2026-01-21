@@ -150,9 +150,9 @@ export class N8nClient {
             name: updatedWorkflow.name,
             nodes: updatedWorkflow.nodes,
             connections: updatedWorkflow.connections,
-            settings: updatedWorkflow.settings
+            settings: updatedWorkflow.settings,
+            tags: updatedWorkflow.tags || [] // Ensure tags is present (often required)
             // staticData is often read-only or internal state, better to exclude it
-            // tags are read-only in PUT, handled separately or immutable via this endpoint
         };
 
         // 1. Tags processing removed (read-only)
