@@ -9,7 +9,7 @@ services:
       - N8N_API_URL=http://host.docker.internal:5678
       - N8N_API_KEY=change_me
     volumes:
-      - ../_bmad:/app/_bmad:ro
+      - ./_bmad:/app/_bmad:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
