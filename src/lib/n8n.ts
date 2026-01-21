@@ -17,7 +17,7 @@ export class N8nClient {
 
         // Debug logging
         console.log(`n8n API call to: ${url}`);
-        console.log(`n8n API key present: ${apiKey ? `Yes (${apiKey.length} chars, starts with ${apiKey.substring(0, 4)}...)` : "NO - MISSING!"}`);
+        // console.log(`n8n API key present: ${apiKey ? `Yes (${apiKey.length} chars)` : "NO"}`);
 
         const headers = {
             "X-N8N-API-KEY": apiKey,
@@ -27,15 +27,28 @@ export class N8nClient {
 
         try {
             const response = await fetch(url, { ...options, headers });
-            if (!response.ok) {
-                throw new Error(`n8n API Error: ${response.status} ${response.statusText}`);
-            }
+
+            // Try to parse JSON regardless of status to extract error info
             const text = await response.text();
-            // Check if response is HTML (error page or login page)
-            if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
-                throw new Error(`n8n API returned HTML instead of JSON. Possible auth issue or wrong URL. Check N8N_API_URL and N8N_API_KEY.`);
+            let data: any;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                data = text;
             }
-            return JSON.parse(text);
+
+            if (!response.ok) {
+                const errorMsg = typeof data === 'object' && data.message ? data.message : JSON.stringify(data);
+                console.error(`n8n API Response Error (${response.status}):`, errorMsg);
+                throw new Error(`n8n API Error: ${response.status} ${response.statusText} - ${errorMsg}`);
+            }
+
+            // Check if response is HTML (error page or login page) but 200 OK (rare but possible)
+            if (typeof data === 'string' && (data.startsWith("<!DOCTYPE") || data.startsWith("<html"))) {
+                throw new Error(`n8n API returned HTML instead of JSON. Possible auth issue or wrong URL.`);
+            }
+
+            return data as T;
         } catch (error) {
             console.error(`Failed to fetch ${url}:`, error);
             throw error;
