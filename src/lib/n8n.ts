@@ -4,7 +4,9 @@ import { configService } from "./config";
 export class N8nClient {
 
     private async getConfig() {
-        const baseUrl = await configService.get("N8N_API_URL") || process.env.N8N_API_URL || "http://localhost:5678";
+        let baseUrl = await configService.get("N8N_API_URL") || process.env.N8N_API_URL || "http://localhost:5678";
+        // Remove trailing slash to prevent double slashes
+        baseUrl = baseUrl.replace(/\/+$/, "");
         const apiKey = await configService.get("N8N_API_KEY") || process.env.N8N_API_KEY || "";
         return { baseUrl, apiKey };
     }
@@ -23,7 +25,12 @@ export class N8nClient {
             if (!response.ok) {
                 throw new Error(`n8n API Error: ${response.status} ${response.statusText}`);
             }
-            return await response.json();
+            const text = await response.text();
+            // Check if response is HTML (error page or login page)
+            if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
+                throw new Error(`n8n API returned HTML instead of JSON. Possible auth issue or wrong URL. Check N8N_API_URL and N8N_API_KEY.`);
+            }
+            return JSON.parse(text);
         } catch (error) {
             console.error(`Failed to fetch ${url}:`, error);
             throw error;
