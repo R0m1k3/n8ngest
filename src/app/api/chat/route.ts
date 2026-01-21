@@ -155,6 +155,13 @@ export async function POST(req: Request) {
             if (action === "update" && workflowId && data) {
                 const updated = await n8nClient.updateWorkflow(workflowId, data);
                 result = { success: true, workflow: updated };
+            } else if (action === "create" && data) {
+                // Check if data has name, nodes, connections
+                // The AI might put them in 'data' or directly in the action object depending on how we define it.
+                // Let's standardise: AI sends { action: "create", data: { name, nodes, connections } }
+                const { name, nodes, connections } = data;
+                const created = await n8nClient.createWorkflow(name || "Nouveau Workflow IA", nodes || [], connections || {});
+                result = { success: true, workflow: created };
             } else if (action === "execute" && workflowId) {
                 const execution = await n8nClient.executeWorkflow(workflowId);
                 result = { success: true, execution };
@@ -245,6 +252,18 @@ Utilise le Markdown pour formater tes réponses.
 4. Si un workflow est chargé, ANALYSE-LE.
 
 ## COMMANDES SPÉCIALES:
+Action "create" (JSON strict):
+\`\`\`n8n-command
+{
+  "action": "create",
+  "data": {
+    "name": "Nom du Workflow",
+    "nodes": [...],
+    "connections": {...}
+  }
+}
+\`\`\`
+
 Action "update" (JSON strict):
 \`\`\`n8n-command
 {
