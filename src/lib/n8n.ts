@@ -113,11 +113,38 @@ export class N8nClient {
             };
         }
 
-        console.log(`Updating workflow ${id} with PUT (${updatedWorkflow.nodes.length} nodes)`);
+        // Sanitize payload for n8n API
+        // 1. Tags must be an array of IDs, not objects
+        const payload: any = { ...updatedWorkflow };
+        if (Array.isArray(payload.tags)) {
+            payload.tags = payload.tags.map((t: any) => typeof t === 'object' && t.id ? t.id : t);
+        }
+
+        // 2. Remove read-only fields that might cause 400 error
+        delete payload.createdAt;
+        delete payload.updatedAt;
+        // id is usually allowed but let's be safe if it's in the URL
+        // delete payload.id; 
+
+        // 3. Ensure nodes don't have extra readonly properties if they came from GET
+        if (Array.isArray(payload.nodes)) {
+            payload.nodes = payload.nodes.map((node: any) => {
+                const cleanNode = { ...node };
+                // Sometimes typeVersion needs to be a number, sometimes string. 
+                // Using what GET returned is usually safe for nodes.
+                return cleanNode;
+            });
+        }
+
+        console.log(`Updating workflow ${id} with PUT (${payload.nodes.length} nodes)`);
+        console.log(`Payload tags: ${JSON.stringify(payload.tags)}`);
+
+        // Log payload snippet for debug
+        // console.log("Payload:", JSON.stringify(payload).slice(0, 500) + "...");
 
         return await this.fetch<N8nWorkflow>(`/workflows/${id}`, {
             method: "PUT",
-            body: JSON.stringify(updatedWorkflow),
+            body: JSON.stringify(payload),
         });
     }
 
