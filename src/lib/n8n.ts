@@ -1,18 +1,19 @@
 import { N8nWorkflow, N8nExecution } from "./types";
+import { configService } from "./config";
 
 export class N8nClient {
-    private baseUrl: string;
-    private apiKey: string;
 
-    constructor() {
-        this.baseUrl = process.env.N8N_API_URL || "http://localhost:5678";
-        this.apiKey = process.env.N8N_API_KEY || "";
+    private async getConfig() {
+        const baseUrl = await configService.get("N8N_API_URL") || process.env.N8N_API_URL || "http://localhost:5678";
+        const apiKey = await configService.get("N8N_API_KEY") || process.env.N8N_API_KEY || "";
+        return { baseUrl, apiKey };
     }
 
     private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-        const url = `${this.baseUrl}/api/v1${path}`;
+        const { baseUrl, apiKey } = await this.getConfig();
+        const url = `${baseUrl}/api/v1${path}`;
         const headers = {
-            "X-N8N-API-KEY": this.apiKey,
+            "X-N8N-API-KEY": apiKey,
             "Content-Type": "application/json",
             ...options.headers,
         };

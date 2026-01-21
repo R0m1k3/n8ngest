@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { useEffect, useState } from "react";
 import { Bot, User, Send, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 function classNames(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -69,9 +70,9 @@ export default function ChatPage() {
         </div>
 
         <div className="mt-auto">
-          <button className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm">
+          <Link href="/settings" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded-md hover:bg-slate-800">
             <Settings size={16} /> Configuration
-          </button>
+          </Link>
         </div>
       </div>
 

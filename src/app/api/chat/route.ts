@@ -1,21 +1,26 @@
 import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { bmadService } from "@/lib/bmad";
+import { configService } from "@/lib/config";
 
 export const runtime = "nodejs";
 
-// Configure OpenAI Provider (supporting Ollama via BaseURL & OpenRouter)
-const openai = createOpenAI({
-    apiKey: process.env.AI_API_KEY || "ollama",
-    baseURL: process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1",
-    headers: {
-        "HTTP-Referer": "https://github.com/R0m1k3/n8ngest", // Required by OpenRouter
-        "X-Title": "n8n Orchestrator", // Optional by OpenRouter
-    }
-});
-
 export async function POST(req: Request) {
     const { messages, agentId } = await req.json();
+
+    // Load Dynamic Config
+    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY || "ollama";
+    const baseURL = await configService.get("AI_BASE_URL") || process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1";
+    const modelName = await configService.get("AI_MODEL") || process.env.AI_MODEL || "llama3";
+
+    const openai = createOpenAI({
+        apiKey,
+        baseURL,
+        headers: {
+            "HTTP-Referer": "https://github.com/R0m1k3/n8ngest",
+            "X-Title": "n8n Orchestrator",
+        }
+    });
 
     let systemPrompt = `You are n8n-orchestrator, an AI assistant dedicated to helping users build and manage n8n workflows.
   You have access to n8n API definitions and can generate JSON workflows.
@@ -41,7 +46,7 @@ export async function POST(req: Request) {
         }
     }
 
-    const model = openai(process.env.AI_MODEL || "llama3");
+    const model = openai(modelName);
 
     const coreMessages = (messages as any[]).map(m => ({
         role: m.role as "user" | "assistant" | "system",

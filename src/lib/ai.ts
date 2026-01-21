@@ -1,13 +1,25 @@
 import OpenAI from "openai";
+import { configService } from "./config";
 
-export const aiClient = new OpenAI({
-    apiKey: process.env.AI_API_KEY || "ollama", // Default to dummy key for Ollama
-    baseURL: process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1", // Default to local Ollama
-});
+// Helper to get dynamic client
+export async function getAiClient() {
+    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY || "ollama";
+    const baseURL = await configService.get("AI_BASE_URL") || process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1";
 
-export const AI_MODEL = process.env.AI_MODEL || "llama3";
+    return new OpenAI({
+        apiKey,
+        baseURL
+    });
+}
+
+export async function getAiModel() {
+    return await configService.get("AI_MODEL") || process.env.AI_MODEL || "llama3";
+}
 
 export async function generateWorkflowPlan(prompt: string, context?: string) {
+    const client = await getAiClient();
+    const model = await getAiModel();
+
     const systemPrompt = `You are an expert n8n workflow architect.
   Your goal is to help users design and create n8n workflows.
   
@@ -18,8 +30,8 @@ export async function generateWorkflowPlan(prompt: string, context?: string) {
   Return a valid JSON structure representing the plan or the n8n workflow nodes if explicitly asked.
   `;
 
-    const response = await aiClient.chat.completions.create({
-        model: AI_MODEL,
+    const response = await client.chat.completions.create({
+        model: model,
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
