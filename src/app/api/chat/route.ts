@@ -102,25 +102,73 @@ ${executionsInfo}
 }
 
 
+import { prisma } from "@/lib/prisma";
+
 export async function POST(req: Request) {
-    const { messages, agentId, workflowAction } = await req.json();
+    const { messages, agentId, workflowAction, sessionId: requestedSessionId } = await req.json();
+
+    // 1. Handle session management first
+    let sessionId = requestedSessionId;
+    let isNewSession = false;
+
+    if (!sessionId) {
+        // Create new session
+        const title = messages[messages.length - 1]?.content.slice(0, 50) + "..." || "Nouvelle discussion";
+        try {
+            const session = await prisma.chatSession.create({
+                data: { title }
+            });
+            sessionId = session.id;
+            isNewSession = true;
+        } catch (e) {
+            console.error("Failed to create session:", e);
+        }
+    }
+
+    // 2. Save User Message
+    const lastMessage = messages[messages.length - 1];
+    if (sessionId && lastMessage && lastMessage.role === 'user') {
+        try {
+            await prisma.chatMessage.create({
+                data: {
+                    role: 'user',
+                    content: lastMessage.content,
+                    sessionId: sessionId
+                }
+            });
+            // Update session timestamp
+            await prisma.chatSession.update({
+                where: { id: sessionId },
+                data: { updatedAt: new Date() }
+            });
+        } catch (e) {
+            console.error("Failed to save user message:", e);
+        }
+    }
 
     // Handle workflow actions from AI commands
     if (workflowAction) {
         try {
             const { action, workflowId, data } = workflowAction;
+            let result: any;
+
             if (action === "update" && workflowId && data) {
                 const updated = await n8nClient.updateWorkflow(workflowId, data);
-                return new Response(JSON.stringify({ success: true, workflow: updated }), {
-                    headers: { "Content-Type": "application/json" }
-                });
-            }
-            if (action === "execute" && workflowId) {
+                result = { success: true, workflow: updated };
+            } else if (action === "execute" && workflowId) {
                 const execution = await n8nClient.executeWorkflow(workflowId);
-                return new Response(JSON.stringify({ success: true, execution }), {
-                    headers: { "Content-Type": "application/json" }
-                });
+                result = { success: true, execution };
+            } else {
+                throw new Error("Action inconnue ou non supportée.");
             }
+
+            // Save Tool/Assistant response if needed (optional for tool outputs, but good for history)
+            // For now, we rely on the AI's interpretation of the result in the next turn,
+            // or we could save a system/tool message. Let's start strictly with chat roles.
+
+            return new Response(JSON.stringify(result), {
+                headers: { "Content-Type": "application/json" }
+            });
         } catch (error) {
             const message = error instanceof Error ? error.message : "Unknown error";
             return new Response(JSON.stringify({ success: false, error: message }), {
@@ -128,15 +176,6 @@ export async function POST(req: Request) {
                 headers: { "Content-Type": "application/json" }
             });
         }
-
-        // If we get here, the action was not handled
-        return new Response(JSON.stringify({
-            success: false,
-            error: "Action inconnue ou non supportée. Les actions valides sont 'update' et 'execute'."
-        }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" }
-        });
     }
 
     // Load Dynamic Config
@@ -159,8 +198,6 @@ export async function POST(req: Request) {
 
     // Fetch real n8n workflows to provide context
     let workflowContext = "";
-    let detailedWorkflow: N8nWorkflow | null = null;
-
     try {
         const workflows = await n8nClient.getWorkflows();
         if (workflows && workflows.length > 0) {
@@ -176,8 +213,7 @@ ${workflows.map(w => `- **${w.name}** (ID: ${w.id}) - ${w.active ? "✅ Actif" :
                     // Try to find matching workflow
                     const found = await n8nClient.findWorkflowByName(mentionedWorkflow);
                     if (found) {
-                        // Load full details
-                        detailedWorkflow = await n8nClient.getWorkflow(found.id);
+                        const detailedWorkflow = await n8nClient.getWorkflow(found.id);
                         workflowContext += "\n" + formatWorkflowDetails(detailedWorkflow);
 
                         // Load execution history
@@ -185,76 +221,49 @@ ${workflows.map(w => `- **${w.name}** (ID: ${w.id}) - ${w.active ? "✅ Actif" :
                             const executions = await n8nClient.getExecutions(found.id, 5);
                             workflowContext += "\n" + formatExecutionHistory(executions);
                         } catch (execError) {
-                            console.error("Failed to fetch executions:", execError);
-                            workflowContext += "\n## ⚠️ Impossible de récupérer l'historique des exécutions\n";
+                            console.log("Failed to fetch executions:", execError);
                         }
                     }
                 }
             }
-        } else {
-            workflowContext = "\n## AUCUN WORKFLOW N8N TROUVÉ\nVérifiez la configuration N8N_API_URL et N8N_API_KEY dans les paramètres.\n";
         }
     } catch (error) {
         console.error("Failed to fetch n8n workflows:", error);
-        workflowContext = "\n## ⚠️ IMPOSSIBLE DE RÉCUPÉRER LES WORKFLOWS N8N\nErreur de connexion à l'API n8n. Vérifiez la configuration.\n";
     }
 
+    // ... (System Prompt logic reuse)
+    // We recreate the prompt here to ensure it's fresh
     let systemPrompt = `Tu es n8n-orchestrator, un assistant IA expert en workflows n8n.
 Tu as accès aux définitions de l'API n8n et tu peux analyser, modifier et exécuter des workflows.
 Tu réponds TOUJOURS en français.
 Utilise le Markdown pour formater tes réponses.
 
 ## RÈGLES STRICTES:
-1. **NE DIS JAMAIS** "je vais investiguer" ou "laissez-moi regarder" sans fournir de résultat immédiat.
-2. **MONTRE TOUJOURS** les données que tu reçois. Si tu as les détails d'un workflow, affiche-les.
-3. **SOIS CONCRET** : donne des noms de nodes, des valeurs de paramètres, des corrections précises.
-4. **AGIS, NE DÉCRIS PAS** : au lieu de dire "vous devriez vérifier...", montre directement ce que tu vois.
-5. Si un workflow est chargé ci-dessous, **ANALYSE-LE IMMÉDIATEMENT** dans ta réponse.
+1. NE DIS JAMAIS "je vais investiguer" sans résultat.
+2. MONTRE TOUJOURS les données.
+3. SOIS CONCRET : noms de nodes, paramètres exacts.
+4. Si un workflow est chargé, ANALYSE-LE.
 
-## CAPACITÉS:
-1. **Lister** les workflows disponibles (automatique)
-2. **Analyser** un workflow en détail (automatique si mentionné)
-3. **Diagnostiquer** les problèmes de configuration
-4. **Proposer des corrections** spécifiques avec le code exact
-5. **Appliquer les corrections** directement si l'utilisateur le demande
-
-## FORMAT DE RÉPONSE QUAND UN WORKFLOW EST MENTIONNÉ:
-1. **Résumé** : Nom du workflow, nombre de nodes, statut
-2. **Nodes clés** : Liste des nodes importants avec leurs types
-3. **Analyse** : Problèmes potentiels identifiés
-4. **Solution** : Correction proposée avec le code ou paramètre exact
-
-## COMMANDES SPÉCIALES (UNIQUEMENT CELLES-CI):
-Il n'existe que 2 actions valides : "update" et "execute". N'INVENTE PAS D'AUTRES ACTIONS comme "analyze" ou "get".
-
-Quand tu veux modifier un workflow, utilise ce format JSON dans un bloc de code:
+## COMMANDES SPÉCIALES:
+Action "update" (JSON strict):
 \`\`\`n8n-command
 {
   "action": "update",
   "workflowId": "<ID>",
-  "changes": {
-    "nodes": [...],
-    "connections": {...}
-  }
+  "changes": { "nodes": [...], "connections": {...} }
 }
 \`\`\`
 
-Pour exécuter un workflow:
+Action "execute":
 \`\`\`n8n-command
-{
-  "action": "execute",
-  "workflowId": "<ID>"
-}
+{ "action": "execute", "workflowId": "<ID>" }
 \`\`\`
 
-${workflowContext}
-
-Tu peux référencer ces workflows par leur nom ou ID. Quand l'utilisateur mentionne un workflow spécifique, ses détails complets sont chargés automatiquement ci-dessus. UTILISE CES DONNÉES dans ta réponse.`;
+${workflowContext}`;
 
     if (agentId) {
         const agent = await bmadService.getAgent(agentId);
         if (agent) {
-            console.log(`Injecting Agent Persona: ${agent.name}`);
             systemPrompt = `
 --- ACTIVATION AGENT BMAD ---
 NOM: ${agent.name}
@@ -266,7 +275,7 @@ ${agent.content}
 --- FIN DÉFINITION AGENT ---
 
 Tu dois incarner cet agent. Tu réponds TOUJOURS en français.
-Tu as accès aux workflows n8n et peux les analyser/modifier.
+Tu as accès aux workflows n8n.
 
 ${workflowContext}
 `;
@@ -289,17 +298,35 @@ ${workflowContext}
             stream: true,
         });
 
-        // Create a ReadableStream from the OpenAI stream
         const encoder = new TextEncoder();
+        let assistantContent = "";
+
         const readableStream = new ReadableStream({
             async start(controller) {
                 try {
                     for await (const chunk of stream) {
                         const content = chunk.choices[0]?.delta?.content || "";
                         if (content) {
+                            assistantContent += content;
                             controller.enqueue(encoder.encode(content));
                         }
                     }
+
+                    // SAVE ASSISTANT MESSAGE ON COMPLETION
+                    if (sessionId && assistantContent) {
+                        try {
+                            await prisma.chatMessage.create({
+                                data: {
+                                    role: 'assistant',
+                                    content: assistantContent,
+                                    sessionId: sessionId
+                                }
+                            });
+                        } catch (e) {
+                            console.error("Failed to save assistant message:", e);
+                        }
+                    }
+
                     controller.close();
                 } catch (error) {
                     controller.error(error);
@@ -311,12 +338,12 @@ ${workflowContext}
             headers: {
                 "Content-Type": "text/plain; charset=utf-8",
                 "Transfer-Encoding": "chunked",
+                "X-Chat-Session-Id": sessionId || ""
             },
         });
     } catch (error) {
         console.error("Chat API Error:", error);
-        const message = error instanceof Error ? error.message : "Unknown error";
-        return new Response(`Error: ${message}`, { status: 500 });
+        return new Response(`Error: ${error instanceof Error ? error.message : "Unknown"}`, { status: 500 });
     }
 }
 
