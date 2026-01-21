@@ -128,6 +128,15 @@ export async function POST(req: Request) {
                 headers: { "Content-Type": "application/json" }
             });
         }
+
+        // If we get here, the action was not handled
+        return new Response(JSON.stringify({
+            success: false,
+            error: "Action inconnue ou non supportée. Les actions valides sont 'update' et 'execute'."
+        }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" }
+        });
     }
 
     // Load Dynamic Config
