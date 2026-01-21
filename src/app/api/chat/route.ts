@@ -4,9 +4,14 @@ import { bmadService } from "@/lib/bmad";
 
 export const runtime = "nodejs";
 
+// Configure OpenAI Provider (supporting Ollama via BaseURL & OpenRouter)
 const openai = createOpenAI({
     apiKey: process.env.AI_API_KEY || "ollama",
     baseURL: process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1",
+    headers: {
+        "HTTP-Referer": "https://github.com/R0m1k3/n8ngest", // Required by OpenRouter
+        "X-Title": "n8n Orchestrator", // Optional by OpenRouter
+    }
 });
 
 export async function POST(req: Request) {
