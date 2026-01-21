@@ -129,12 +129,44 @@ export default function ChatPage() {
 
           // Add a system message about the result
           if (result.success) {
+            // Verification step: Re-fetch the workflow to confirm changes
+            let verificationMessage = `\n\n✅ **Commande n8n exécutée avec succès !**\n- Action: ${commandJson.action}\n- Workflow ID: ${commandJson.workflowId}`;
+
+            try {
+              const verifyResponse = await fetch(`/api/n8n/workflows/${commandJson.workflowId}`);
+              if (verifyResponse.ok) {
+                const updatedWorkflow = await verifyResponse.json();
+
+                // Check if specific nodes were modified
+                const changedNodes = commandJson.changes?.nodes || [];
+                const verifiedNodes: string[] = [];
+
+                for (const changedNode of changedNodes) {
+                  const actualNode = updatedWorkflow.nodes?.find(
+                    (n: any) => n.name === changedNode.name || n.id === changedNode.id
+                  );
+                  if (actualNode) {
+                    verifiedNodes.push(`  - ✅ **${actualNode.name}** (${actualNode.type})`);
+                  }
+                }
+
+                if (verifiedNodes.length > 0) {
+                  verificationMessage += `\n\n🔍 **Vérification dans n8n :**\n${verifiedNodes.join("\n")}`;
+                }
+
+                verificationMessage += `\n\n📋 **État actuel du workflow :**\n- Nombre de nodes: ${updatedWorkflow.nodes?.length || 0}\n- Statut: ${updatedWorkflow.active ? "✅ Actif" : "❌ Inactif"}\n- Dernière modification: ${new Date(updatedWorkflow.updatedAt).toLocaleString("fr-FR")}`;
+              }
+            } catch (verifyError) {
+              console.error("Verification failed:", verifyError);
+              verificationMessage += `\n\n⚠️ Vérification impossible (workflow non accessible)`;
+            }
+
             setMessages((prev) => [
               ...prev,
               {
                 id: (Date.now() + 2).toString(),
                 role: "assistant",
-                content: `\n\n✅ **Commande n8n exécutée avec succès !**\n- Action: ${commandJson.action}\n- Workflow ID: ${commandJson.workflowId}`,
+                content: verificationMessage,
               },
             ]);
           } else {
