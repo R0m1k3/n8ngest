@@ -138,7 +138,7 @@ export default function ChatPage() {
             />
             <button
               type="submit"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !(input || "").trim()}
               className="absolute right-2 top-2 bottom-2 aspect-square bg-orange-600 hover:bg-orange-500 text-white rounded-md flex items-center justify-center transition-all disabled:opacity-50 disabled:hover:bg-orange-600"
             >
               <Send size={18} />
