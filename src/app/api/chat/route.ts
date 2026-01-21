@@ -50,6 +50,58 @@ ${JSON.stringify(workflow.connections, null, 2)}
 `;
 }
 
+/**
+ * Format execution history for AI context
+ */
+function formatExecutionHistory(executions: any[]): string {
+    if (!executions || executions.length === 0) {
+        return "\n## 📊 HISTORIQUE DES EXÉCUTIONS: Aucune exécution récente\n";
+    }
+
+    const executionsInfo = executions.slice(0, 5).map((exec, i) => {
+        const status = exec.finished ? (exec.status === "error" ? "❌ Échec" : "✅ Succès") : "⏳ En cours";
+        const startTime = new Date(exec.startedAt).toLocaleString("fr-FR");
+        const duration = exec.stoppedAt
+            ? `${((new Date(exec.stoppedAt).getTime() - new Date(exec.startedAt).getTime()) / 1000).toFixed(1)}s`
+            : "N/A";
+
+        // Extract error info if available
+        let errorInfo = "";
+        if (exec.data?.resultData?.error) {
+            const error = exec.data.resultData.error;
+            errorInfo = `\n   **Erreur**: ${error.message || JSON.stringify(error)}`;
+        }
+
+        // Extract node outputs summary
+        let nodeOutputs = "";
+        if (exec.data?.resultData?.runData) {
+            const runData = exec.data.resultData.runData;
+            const nodeNames = Object.keys(runData).slice(0, 5);
+            nodeOutputs = nodeNames.map(name => {
+                const nodeData = runData[name];
+                if (Array.isArray(nodeData) && nodeData[0]?.data?.main) {
+                    const outputCount = nodeData[0].data.main[0]?.length || 0;
+                    return `   - **${name}**: ${outputCount} item(s)`;
+                }
+                return `   - **${name}**: exécuté`;
+            }).join("\n");
+        }
+
+        return `
+### Exécution #${i + 1} (ID: ${exec.id})
+- **Statut**: ${status}
+- **Démarré**: ${startTime}
+- **Durée**: ${duration}${errorInfo}
+${nodeOutputs ? `\n**Données par node:**\n${nodeOutputs}` : ""}`;
+    }).join("\n");
+
+    return `
+## 📊 HISTORIQUE DES ${executions.length} DERNIÈRES EXÉCUTIONS:
+${executionsInfo}
+`;
+}
+
+
 export async function POST(req: Request) {
     const { messages, agentId, workflowAction } = await req.json();
 
@@ -118,6 +170,15 @@ ${workflows.map(w => `- **${w.name}** (ID: ${w.id}) - ${w.active ? "✅ Actif" :
                         // Load full details
                         detailedWorkflow = await n8nClient.getWorkflow(found.id);
                         workflowContext += "\n" + formatWorkflowDetails(detailedWorkflow);
+
+                        // Load execution history
+                        try {
+                            const executions = await n8nClient.getExecutions(found.id, 5);
+                            workflowContext += "\n" + formatExecutionHistory(executions);
+                        } catch (execError) {
+                            console.error("Failed to fetch executions:", execError);
+                            workflowContext += "\n## ⚠️ Impossible de récupérer l'historique des exécutions\n";
+                        }
                     }
                 }
             }
