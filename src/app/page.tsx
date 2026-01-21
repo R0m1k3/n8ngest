@@ -102,6 +102,55 @@ export default function ChatPage() {
           )
         );
       }
+
+      // Check for n8n-command blocks in the response and execute them
+      const commandMatch = fullContent.match(/```n8n-command\s*([\s\S]*?)```/);
+      if (commandMatch) {
+        try {
+          const commandJson = JSON.parse(commandMatch[1].trim());
+          console.log("Executing n8n command:", commandJson);
+
+          // Execute the command
+          const actionResponse = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [],
+              workflowAction: {
+                action: commandJson.action,
+                workflowId: commandJson.workflowId,
+                data: commandJson.changes || commandJson.data,
+              },
+            }),
+          });
+
+          const result = await actionResponse.json();
+          console.log("n8n command result:", result);
+
+          // Add a system message about the result
+          if (result.success) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: (Date.now() + 2).toString(),
+                role: "assistant",
+                content: `\n\n✅ **Commande n8n exécutée avec succès !**\n- Action: ${commandJson.action}\n- Workflow ID: ${commandJson.workflowId}`,
+              },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: (Date.now() + 2).toString(),
+                role: "assistant",
+                content: `\n\n❌ **Erreur lors de l'exécution de la commande n8n**\n${result.error || "Erreur inconnue"}`,
+              },
+            ]);
+          }
+        } catch (cmdError) {
+          console.error("Failed to parse/execute n8n command:", cmdError);
+        }
+      }
     } catch (err) {
       console.error("Chat Error:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
