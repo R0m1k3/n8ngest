@@ -123,15 +123,21 @@ export class N8nClient {
         // 2. Remove read-only fields that might cause 400 error
         delete payload.createdAt;
         delete payload.updatedAt;
-        // id is usually allowed but let's be safe if it's in the URL
-        // delete payload.id; 
+        delete payload.versionId; // Important: versionId cannot be updated manually
+        delete payload.pinData;   // Can cause issues if too large or malformed
+
+        // n8n API sometimes rejects 'active' in PUT if it's already active (requires separate endpoint usually)
+        // But for now let's try keeping it consistent or removing if it causes issues.
+        // Let's rely on n8n handling activation state separately if needed.
+        // delete payload.active; 
 
         // 3. Ensure nodes don't have extra readonly properties if they came from GET
         if (Array.isArray(payload.nodes)) {
             payload.nodes = payload.nodes.map((node: any) => {
                 const cleanNode = { ...node };
-                // Sometimes typeVersion needs to be a number, sometimes string. 
-                // Using what GET returned is usually safe for nodes.
+                // Remove potential runtime data
+                delete cleanNode.executionId;
+                delete cleanNode.executionData;
                 return cleanNode;
             });
         }
