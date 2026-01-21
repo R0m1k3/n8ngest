@@ -26,13 +26,28 @@ export default function SettingsPage() {
     const [configs, setConfigs] = useState<Record<string, string>>({});
     const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
+    const [models, setModels] = useState<any[]>([]);
+    const [loadingModels, setLoadingModels] = useState(false);
+
     useEffect(() => {
+        // Fetch Settings
         fetch("/api/settings")
             .then((res) => res.json())
             .then((data) => {
                 setConfigs(data);
                 setLoading(false);
             });
+
+        // Fetch Models
+        setLoadingModels(true);
+        fetch("/api/ai/models")
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.models) {
+                    setModels(data.models);
+                }
+            })
+            .finally(() => setLoadingModels(false));
     }, []);
 
     const handleChange = (key: string, value: string) => {
@@ -88,13 +103,37 @@ export default function SettingsPage() {
                                     {field.label}
                                 </label>
                                 <div className="relative">
-                                    <input
-                                        type={field.secret && !showSecrets[field.key] ? "password" : "text"}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-700"
-                                        placeholder={field.placeholder}
-                                        value={configs[field.key] || ""}
-                                        onChange={(e) => handleChange(field.key, e.target.value)}
-                                    />
+                                    {field.key === "AI_MODEL" ? (
+                                        <div className="relative">
+                                            <select
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none"
+                                                value={configs[field.key] || ""}
+                                                onChange={(e) => handleChange(field.key, e.target.value)}
+                                                disabled={loadingModels}
+                                            >
+                                                <option value="" disabled>Select a model...</option>
+                                                {models.map((model) => (
+                                                    <option key={model.id} value={model.id}>
+                                                        {model.name} — Input: ${parseFloat(model.pricing.prompt) * 1000000}/M - Output: ${parseFloat(model.pricing.completion) * 1000000}/M
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingModels && (
+                                                <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                                                    <Loader2 className="animate-spin text-slate-500" size={16} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <input
+                                            type={field.secret && !showSecrets[field.key] ? "password" : "text"}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-700"
+                                            placeholder={field.placeholder}
+                                            value={configs[field.key] || ""}
+                                            onChange={(e) => handleChange(field.key, e.target.value)}
+                                        />
+                                    )}
+
                                     {field.secret && (
                                         <button
                                             type="button"
