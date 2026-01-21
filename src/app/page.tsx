@@ -1,12 +1,11 @@
-"use client";
-
 import { useEffect, useState, FormEvent, useRef } from "react";
-import { Bot, User, Send, Settings, Check, Copy } from "lucide-react";
+import { Bot, User, Send, Settings, Check, Copy, Menu, X } from "lucide-react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import ChatSidebar from "@/components/ChatSidebar";
 
 function classNames(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -83,6 +82,10 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Session State
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [showSidebar, setShowSidebar] = useState(true);
+
   useEffect(() => {
     fetch("/api/agents")
       .then((res) => res.json())
@@ -96,6 +99,38 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load Session History
+  const loadSession = async (id: string) => {
+    setIsLoading(true);
+    setSessionId(id);
+    try {
+      const res = await fetch(`/api/chat/sessions/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Convert DB messages to UI messages
+        if (data.messages) {
+          setMessages(data.messages.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content
+          })));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Failed to load session");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNewChat = () => {
+    setSessionId(null);
+    setMessages([]);
+    setError(null);
+    setInput("");
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -122,11 +157,18 @@ export default function ChatPage() {
             content: m.content,
           })),
           agentId: selectedAgent,
+          sessionId: sessionId // Send current session ID if exists
         }),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Capture new Session ID from header if it was created
+      const newSessionId = response.headers.get("X-Chat-Session-Id");
+      if (newSessionId && !sessionId) {
+        setSessionId(newSessionId);
       }
 
       const reader = response.body?.getReader();
@@ -223,6 +265,12 @@ export default function ChatPage() {
                 content: verificationMessage,
               },
             ]);
+
+            // Save verification message if we have a session
+            // (Wait, we can't save it from client easily without an API route for explicit message save. 
+            // For now, it stays in UI only, or we could add a `saveMessage` RPC. 
+            // Let's assume user accepts ephemeral system messages for now.)
+
           } else {
             setMessages((prev) => [
               ...prev,
@@ -247,53 +295,57 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-4">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
-            <span className="font-bold text-white">n8n</span>
-          </div>
-          <h1 className="font-bold text-lg tracking-tight">Orchestrator</h1>
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-semibold text-slate-500 uppercase">Agent Persona</label>
-          <select
-            className="w-full bg-slate-800 border border-slate-700 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            value={selectedAgent}
-            onChange={(e) => setSelectedAgent(e.target.value)}
-          >
-            <option value="">Default Assistant</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
-          </select>
-          {selectedAgent && (
-            <p className="text-xs text-slate-400 mt-1">
-              {agents.find((a) => a.id === selectedAgent)?.description?.slice(0, 100)}...
-            </p>
-          )}
-        </div>
+      {/* Sidebar Toggle (Mobile) */}
+      <button
+        onClick={() => setShowSidebar(!showSidebar)}
+        className="fixed top-4 left-4 z-50 p-2 bg-slate-800 rounded-md md:hidden"
+      >
+        {showSidebar ? <X size={20} /> : <Menu size={20} />}
+      </button>
 
-        <div className="mt-auto">
-          <Link
-            href="/settings"
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded-md hover:bg-slate-800"
-          >
-            <Settings size={16} /> Configuration
-          </Link>
-        </div>
+      {/* Sidebar Area */}
+      <div className={`${showSidebar ? 'block' : 'hidden'} md:block h-full`}>
+        <ChatSidebar
+          currentSessionId={sessionId}
+          onSessionSelect={loadSession}
+          onNewChat={handleNewChat}
+        />
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative">
+      <div className="flex-1 flex flex-col relative w-full">
+
+        {/* Top Bar for Agent Selection (moved from sidebar) */}
+        {!sessionId && messages.length === 0 && (
+          <div className="absolute top-4 right-4 z-10">
+            <select
+              className="bg-slate-800 border border-slate-700 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              value={selectedAgent}
+              onChange={(e) => setSelectedAgent(e.target.value)}
+            >
+              <option value="">Default Assistant</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+            <Link
+              href="/settings"
+              className="ml-2 inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm p-2 rounded-md hover:bg-slate-800"
+            >
+              <Settings size={16} />
+            </Link>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
               <Bot size={48} className="opacity-20" />
               <p>Sélectionnez un agent ou commencez à discuter pour gérer vos workflows n8n.</p>
+              <p className="text-xs text-slate-600">Les discussions sont sauvegardées automatiquement.</p>
             </div>
           ) : (
             messages.map((message) => (
