@@ -7,6 +7,8 @@ export interface N8nWorkflow {
     createdAt: string;
     updatedAt: string;
     tags?: { id: string; name: string }[];
+    settings?: any;
+    staticData?: any;
 }
 
 export interface N8nExecution {
