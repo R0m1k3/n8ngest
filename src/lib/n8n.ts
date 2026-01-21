@@ -145,16 +145,12 @@ export class N8nClient {
             name: updatedWorkflow.name,
             nodes: updatedWorkflow.nodes,
             connections: updatedWorkflow.connections,
-            settings: updatedWorkflow.settings,
-            staticData: updatedWorkflow.staticData,
-            tags: updatedWorkflow.tags,
-            // active field is read-only in PUT, handled separately via activateWorkflow
+            settings: updatedWorkflow.settings
+            // staticData is often read-only or internal state, better to exclude it
+            // tags are read-only in PUT, handled separately or immutable via this endpoint
         };
 
-        // 1. Tags must be an array of IDs, not objects
-        if (Array.isArray(payload.tags)) {
-            payload.tags = payload.tags.map((t: any) => typeof t === 'object' && t.id ? t.id : t);
-        }
+        // 1. Tags processing removed (read-only)
 
         // 2. Nodes cleaning
         if (Array.isArray(payload.nodes)) {
