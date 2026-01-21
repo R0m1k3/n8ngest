@@ -176,12 +176,26 @@ export class N8nClient {
             });
         }
 
-        // 3. Settings cleaning
+        // 3. Settings cleaning strict allowlist
         if (payload.settings) {
-            // Remove potentially read-only or problematic settings if any
-            // saveExecutionProgress is sometimes problematic, but usually allowed.
-            // If we want to be safe, we can leave it.
-            // delete payload.settings.saveExecutionProgress;
+            const validSettings = [
+                'defaultData',
+                'errorWorkflow',
+                'timezone',
+                'saveExecutionProgress',
+                'saveManualExecutions',
+                'saveDataErrorExecution',
+                'saveDataSuccessExecution',
+                'executionTimeout',
+                'callerPolicy'
+            ];
+            const cleanSettings: any = {};
+            for (const key of validSettings) {
+                if ((payload.settings as any)[key] !== undefined) {
+                    cleanSettings[key] = (payload.settings as any)[key];
+                }
+            }
+            payload.settings = cleanSettings;
         }
 
         console.log(`Updating workflow ${id} with PUT (${payload.nodes?.length} nodes)`);
