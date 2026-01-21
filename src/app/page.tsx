@@ -1,17 +1,11 @@
 "use client";
 
-import { useEffect, useState, FormEvent, useRef } from "react";
-import { Bot, User, Send, Settings, Check, Copy, Menu, X } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { Bot, Settings, Menu, X } from "lucide-react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import ChatSidebar from "@/components/ChatSidebar";
-
-function classNames(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(" ");
-}
+import MessageBubble from "@/components/MessageBubble";
+import ChatInput from "@/components/ChatInput";
 
 interface Agent {
   id: string;
@@ -25,60 +19,9 @@ interface Message {
   content: string;
 }
 
-const CodeBlock = ({ inline, className, children, ...props }: any) => {
-  const match = /language-(\w+)/.exec(className || "");
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(String(children).replace(/\n$/, ""));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  if (!inline && match) {
-    return (
-      <div className="relative group rounded-md overflow-hidden my-4">
-        <div className="flex items-center justify-between bg-zinc-700 px-4 py-2 text-xs text-zinc-200">
-          <span className="font-mono">{match[1]}</span>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1 hover:text-white transition-colors"
-          >
-            {copied ? (
-              <>
-                <Check size={14} className="text-green-400" /> Copié
-              </>
-            ) : (
-              <>
-                <Copy size={14} /> Copier
-              </>
-            )}
-          </button>
-        </div>
-        <SyntaxHighlighter
-          style={oneDark}
-          language={match[1]}
-          PreTag="div"
-          customStyle={{ margin: 0, borderRadius: "0 0 0.375rem 0.375rem" }}
-          {...props}
-        >
-          {String(children).replace(/\n$/, "")}
-        </SyntaxHighlighter>
-      </div>
-    );
-  }
-
-  return (
-    <code className={classNames("bg-slate-800 rounded px-1 py-0.5", className)} {...props}>
-      {children}
-    </code>
-  );
-};
-
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
-  const [input, setInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +49,7 @@ export default function ChatPage() {
   const loadSession = async (id: string) => {
     setIsLoading(true);
     setSessionId(id);
+    setMessages([]); // Clear previous messages immediately
     try {
       const res = await fetch(`/api/chat/sessions/${id}`);
       if (res.ok) {
@@ -131,21 +75,16 @@ export default function ChatPage() {
     setSessionId(null);
     setMessages([]);
     setError(null);
-    setInput("");
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
+  const handleSendMessage = useCallback(async (content: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: content.trim(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setIsLoading(true);
     setError(null);
 
@@ -231,28 +170,31 @@ export default function ChatPage() {
             let verificationMessage = `\n\n✅ **Commande n8n exécutée avec succès !**\n- Action: ${commandJson.action}\n- Workflow ID: ${commandJson.workflowId}`;
 
             try {
-              const verifyResponse = await fetch(`/api/n8n/workflows/${commandJson.workflowId}`);
-              if (verifyResponse.ok) {
-                const updatedWorkflow = await verifyResponse.json();
+              if (commandJson.workflowId || result.workflow?.id) {
+                const targetId = commandJson.workflowId || result.workflow?.id;
+                const verifyResponse = await fetch(`/api/n8n/workflows/${targetId}`);
+                if (verifyResponse.ok) {
+                  const updatedWorkflow = await verifyResponse.json();
 
-                // Check if specific nodes were modified
-                const changedNodes = commandJson.changes?.nodes || [];
-                const verifiedNodes: string[] = [];
+                  // Check if specific nodes were modified
+                  const changedNodes = commandJson.changes?.nodes || commandJson.data?.nodes || [];
+                  const verifiedNodes: string[] = [];
 
-                for (const changedNode of changedNodes) {
-                  const actualNode = updatedWorkflow.nodes?.find(
-                    (n: any) => n.name === changedNode.name || n.id === changedNode.id
-                  );
-                  if (actualNode) {
-                    verifiedNodes.push(`  - ✅ **${actualNode.name}** (${actualNode.type})`);
+                  for (const changedNode of changedNodes) {
+                    const actualNode = updatedWorkflow.nodes?.find(
+                      (n: any) => n.name === changedNode.name || n.id === changedNode.id
+                    );
+                    if (actualNode) {
+                      verifiedNodes.push(`  - ✅ **${actualNode.name}** (${actualNode.type})`);
+                    }
                   }
-                }
 
-                if (verifiedNodes.length > 0) {
-                  verificationMessage += `\n\n🔍 **Vérification dans n8n :**\n${verifiedNodes.join("\n")}`;
-                }
+                  if (verifiedNodes.length > 0) {
+                    verificationMessage += `\n\n🔍 **Vérification dans n8n :**\n${verifiedNodes.join("\n")}`;
+                  }
 
-                verificationMessage += `\n\n📋 **État actuel du workflow :**\n- Nombre de nodes: ${updatedWorkflow.nodes?.length || 0}\n- Statut: ${updatedWorkflow.active ? "✅ Actif" : "❌ Inactif"}\n- Dernière modification: ${new Date(updatedWorkflow.updatedAt).toLocaleString("fr-FR")}`;
+                  verificationMessage += `\n\n📋 **État actuel du workflow :**\n- Nombre de nodes: ${updatedWorkflow.nodes?.length || 0}\n- Statut: ${updatedWorkflow.active ? "✅ Actif" : "❌ Inactif"}\n- Dernière modification: ${new Date(updatedWorkflow.updatedAt).toLocaleString("fr-FR")}`;
+                }
               }
             } catch (verifyError) {
               console.error("Verification failed:", verifyError);
@@ -267,11 +209,6 @@ export default function ChatPage() {
                 content: verificationMessage,
               },
             ]);
-
-            // Save verification message if we have a session
-            // (Wait, we can't save it from client easily without an API route for explicit message save. 
-            // For now, it stays in UI only, or we could add a `saveMessage` RPC. 
-            // Let's assume user accepts ephemeral system messages for now.)
 
           } else {
             setMessages((prev) => [
@@ -293,7 +230,7 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [messages, selectedAgent, sessionId]); // Dependencies for callback
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
@@ -351,35 +288,7 @@ export default function ChatPage() {
             </div>
           ) : (
             messages.map((message) => (
-              <div
-                key={message.id}
-                className={classNames(
-                  "flex gap-4 p-4 rounded-lg max-w-3xl",
-                  message.role === "assistant" ? "bg-slate-900 mx-auto" : "bg-slate-800 ml-auto"
-                )}
-              >
-                <div className="flex-shrink-0 mt-1">
-                  {message.role === "assistant" ? (
-                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
-                      <Bot size={20} className="text-white" />
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center">
-                      <User size={20} className="text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 prose prose-invert max-w-none">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code: CodeBlock,
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
-              </div>
+              <MessageBubble key={message.id} message={message} />
             ))
           )}
           {isLoading && (
@@ -403,29 +312,14 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-950/80 backdrop-blur-sm border-t border-slate-800">
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Décrivez le workflow que vous souhaitez créer ou modifier..."
-              className="w-full bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500 rounded-xl pr-12 py-4 shadow-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all"
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-orange-600 text-white rounded-lg hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send size={18} />
-            </button>
-          </form>
-          <div className="text-center mt-2">
-            <p className="text-xs text-slate-500">
-              Powered by OpenRouter & n8n API • {messages.length > 0 ? `${messages.length} messages` : "Ready"}
-            </p>
-          </div>
+        <ChatInput
+          onSend={handleSendMessage}
+          isLoading={isLoading}
+        />
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none p-4 pb-1 text-center">
+          <p className="text-xs text-slate-500">
+            Powered by OpenRouter & n8n API • {messages.length > 0 ? `${messages.length} messages` : "Ready"}
+          </p>
         </div>
       </div>
     </div>
