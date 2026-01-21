@@ -280,16 +280,22 @@ Action "execute":
 
 ${workflowContext}`;
 
+    // Load User Name
+    const userName = await configService.get("USER_NAME") || process.env.USER_NAME || "Utilisateur";
+
     if (agentId) {
         const agent = await bmadService.getAgent(agentId);
         if (agent) {
+            // Replace {user_name} placeholder in agent content
+            const personalizedContent = agent.content.replace(/{user_name}/g, userName);
+
             systemPrompt = `
 --- ACTIVATION AGENT BMAD ---
 NOM: ${agent.name}
 DESCRIPTION: ${agent.description}
 
 INSTRUCTIONS/PERSONA:
-${agent.content}
+${personalizedContent}
 
 --- FIN DÉFINITION AGENT ---
 
