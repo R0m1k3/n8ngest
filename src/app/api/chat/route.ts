@@ -9,16 +9,16 @@ export async function POST(req: Request) {
     const { messages, agentId } = await req.json();
 
     // Load Dynamic Config
-    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY || "ollama";
-    const baseURL = await configService.get("AI_BASE_URL") || process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1";
-    const modelName = await configService.get("AI_MODEL") || process.env.AI_MODEL || "llama3";
+    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY;
+    const modelName = await configService.get("AI_MODEL") || process.env.AI_MODEL || "anthropic/claude-3-sonnet";
 
+    // OpenRouter requires specific setup
     const openai = createOpenAI({
         apiKey,
-        baseURL,
+        baseURL: "https://openrouter.ai/api/v1",
         headers: {
-            "HTTP-Referer": "https://github.com/R0m1k3/n8ngest",
-            "X-Title": "n8n Orchestrator",
+            "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+            "X-Title": "n8n AI Orchestrator",
         }
     });
 
