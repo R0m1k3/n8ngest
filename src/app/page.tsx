@@ -1,9 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { Bot, User, Send, Settings } from "lucide-react";
-import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 function classNames(...classes: (string | undefined | null | false)[]) {
@@ -19,6 +18,7 @@ interface Agent {
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [input, setInput] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/agents")
@@ -30,8 +30,8 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Configure useChat with explicit API endpoint
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
+  // AI SDK 5.0+ compatible useChat - input is now managed by us
+  const { messages, append, status, error } = useChat({
     api: "/api/chat",
     body: {
       agentId: selectedAgent,
@@ -41,10 +41,20 @@ export default function ChatPage() {
     },
   });
 
-  // Debug: log when input changes
-  useEffect(() => {
-    console.log("useChat state:", { input, messagesCount: messages?.length, isLoading, error });
-  }, [input, messages, isLoading, error]);
+  const isLoading = status === "streaming" || status === "submitted";
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input;
+    setInput(""); // Clear input immediately
+
+    await append({
+      role: "user",
+      content: userMessage,
+    });
+  };
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
@@ -73,7 +83,7 @@ export default function ChatPage() {
           </select>
           {selectedAgent && (
             <p className="text-xs text-slate-400 mt-1">
-              {agents.find(a => a.id === selectedAgent)?.description.slice(0, 100)}...
+              {agents.find(a => a.id === selectedAgent)?.description?.slice(0, 100)}...
             </p>
           )}
         </div>
@@ -97,7 +107,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          {(messages as any[]).map((m: any) => (
+          {messages.map((m) => (
             <div
               key={m.id}
               className={classNames(
@@ -130,6 +140,11 @@ export default function ChatPage() {
               </div>
             </div>
           )}
+          {error && (
+            <div className="p-4 bg-red-900/50 border border-red-700 rounded-xl max-w-4xl mx-auto text-red-200">
+              Error: {error.message}
+            </div>
+          )}
         </div>
 
         {/* Input Area */}
@@ -141,13 +156,12 @@ export default function ChatPage() {
             <input
               className="flex-1 bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-600"
               value={input}
-              onChange={handleInputChange}
-
+              onChange={(e) => setInput(e.target.value)}
               placeholder="Describe a workflow to create..."
             />
             <button
               type="submit"
-              disabled={isLoading || !(input || "").trim()}
+              disabled={isLoading || !input.trim()}
               className="absolute right-2 top-2 bottom-2 aspect-square bg-orange-600 hover:bg-orange-500 text-white rounded-md flex items-center justify-center transition-all disabled:opacity-50 disabled:hover:bg-orange-600"
             >
               <Send size={18} />
@@ -163,3 +177,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
