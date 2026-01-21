@@ -1,7 +1,6 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent, useRef } from "react";
 import { Bot, User, Send, Settings } from "lucide-react";
 import Link from "next/link";
 
@@ -15,10 +14,20 @@ interface Agent {
   description: string;
 }
 
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [input, setInput] = useState<string>("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/agents")
@@ -30,30 +39,75 @@ export default function ChatPage() {
       });
   }, []);
 
-  // AI SDK 5.0+ compatible useChat - input is now managed by us
-  const { messages, append, status, error } = useChat({
-    api: "/api/chat",
-    body: {
-      agentId: selectedAgent,
-    },
-    onError: (err) => {
-      console.error("Chat Error:", err);
-    },
-  });
-
-  const isLoading = status === "streaming" || status === "submitted";
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = input;
-    setInput(""); // Clear input immediately
-
-    await append({
+    const userMessage: Message = {
+      id: Date.now().toString(),
       role: "user",
-      content: userMessage,
-    });
+      content: input.trim(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          agentId: selectedAgent,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const assistantId = (Date.now() + 1).toString();
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "" },
+      ]);
+
+      let fullContent = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        fullContent += chunk;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: fullContent } : m
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Chat Error:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -83,13 +137,16 @@ export default function ChatPage() {
           </select>
           {selectedAgent && (
             <p className="text-xs text-slate-400 mt-1">
-              {agents.find(a => a.id === selectedAgent)?.description?.slice(0, 100)}...
+              {agents.find((a) => a.id === selectedAgent)?.description?.slice(0, 100)}...
             </p>
           )}
         </div>
 
         <div className="mt-auto">
-          <Link href="/settings" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded-md hover:bg-slate-800">
+          <Link
+            href="/settings"
+            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded-md hover:bg-slate-800"
+          >
             <Settings size={16} /> Configuration
           </Link>
         </div>
@@ -99,7 +156,7 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
-          {messages.length === 0 && (
+          {messages.length === 0 && !isLoading && !error && (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
               <Bot size={48} className="mb-4 text-slate-700" />
               <p className="text-lg font-medium">Ready to orchestrate.</p>
@@ -125,13 +182,14 @@ export default function ChatPage() {
               >
                 <div className="flex items-center gap-2 mb-2 opacity-50 text-xs uppercase font-bold tracking-wider">
                   {m.role === "user" ? <User size={12} /> : <Bot size={12} />}
-                  {m.role === "user" ? "You" : selectedAgent || "System"}
+                  {m.role === "user" ? "You" : selectedAgent || "Assistant"}
                 </div>
-                {m.content}
+                {m.content || (isLoading && m.role === "assistant" ? "..." : "")}
               </div>
             </div>
           ))}
-          {isLoading && (
+
+          {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
             <div className="flex gap-4 max-w-4xl mx-auto">
               <div className="p-4 bg-slate-800 border border-slate-700 rounded-xl rounded-bl-none animate-pulse">
                 <span className="w-2 h-2 bg-slate-500 rounded-full inline-block mx-1 animate-bounce"></span>
@@ -140,19 +198,19 @@ export default function ChatPage() {
               </div>
             </div>
           )}
+
           {error && (
             <div className="p-4 bg-red-900/50 border border-red-700 rounded-xl max-w-4xl mx-auto text-red-200">
-              Error: {error.message}
+              Error: {error}
             </div>
           )}
+
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
         <div className="p-4 bg-slate-900 border-t border-slate-800">
-          <form
-            onSubmit={handleSubmit}
-            className="max-w-4xl mx-auto flex gap-4 relative"
-          >
+          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex gap-4 relative">
             <input
               className="flex-1 bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-600"
               value={input}
@@ -169,7 +227,7 @@ export default function ChatPage() {
           </form>
           <div className="text-center mt-2">
             <span className="text-[10px] text-slate-600">
-              Powered by n8n Orchestrator • AI Model: {process.env.NEXT_PUBLIC_AI_MODEL || 'Auto'}
+              Powered by n8n Orchestrator • OpenRouter AI
             </span>
           </div>
         </div>
