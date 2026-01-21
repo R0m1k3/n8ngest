@@ -14,6 +14,11 @@ export class N8nClient {
     private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
         const { baseUrl, apiKey } = await this.getConfig();
         const url = `${baseUrl}/api/v1${path}`;
+
+        // Debug logging
+        console.log(`n8n API call to: ${url}`);
+        console.log(`n8n API key present: ${apiKey ? `Yes (${apiKey.length} chars, starts with ${apiKey.substring(0, 4)}...)` : "NO - MISSING!"}`);
+
         const headers = {
             "X-N8N-API-KEY": apiKey,
             "Content-Type": "application/json",
