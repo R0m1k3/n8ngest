@@ -17,3 +17,20 @@ model AppConfig {
   isSecret  Boolean  @default(false)
   updatedAt DateTime @updatedAt
 }
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  title     String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  role      String      // "user", "assistant", "system"
+  content   String
+  createdAt DateTime    @default(now())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
