@@ -138,46 +138,56 @@ export class N8nClient {
             };
         }
 
-        // Sanitize payload for n8n API
-        const payload: any = { ...updatedWorkflow };
+        // Sanitize payload for n8n API using a STRICT ALLOWLIST approach
+        // n8n returns "request/body must NOT have additional properties" if we send extra fields (like owner, meta, scopes)
 
-        // Ensure payload says it is inactive (since we deactivated it)
-        payload.active = false;
+        const payload: any = {
+            name: updatedWorkflow.name,
+            nodes: updatedWorkflow.nodes,
+            connections: updatedWorkflow.connections,
+            settings: updatedWorkflow.settings,
+            staticData: updatedWorkflow.staticData,
+            tags: updatedWorkflow.tags,
+            // We handle activation separately, but n8n spec might allow it here too. 
+            // Since we deactivate manually, we set it to false here to be safe/consistent.
+            active: false
+        };
 
         // 1. Tags must be an array of IDs, not objects
         if (Array.isArray(payload.tags)) {
             payload.tags = payload.tags.map((t: any) => typeof t === 'object' && t.id ? t.id : t);
         }
 
-        // 2. Remove read-only fields that might cause 400 error
-        delete payload.createdAt;
-        delete payload.updatedAt;
-        delete payload.versionId; // Important: versionId cannot be updated manually
-        delete payload.pinData;   // Can cause issues if too large or malformed
-        delete payload.settings?.saveExecutionProgress; // Sometimes causes issues
-
-        // n8n API sometimes rejects 'active' in PUT if it's already active (requires separate endpoint usually)
-        // But for now let's try keeping it consistent or removing if it causes issues.
-        // Let's rely on n8n handling activation state separately if needed.
-        // delete payload.active; 
-
-        // 3. Ensure nodes don't have extra readonly properties if they came from GET
+        // 2. Nodes cleaning
         if (Array.isArray(payload.nodes)) {
             payload.nodes = payload.nodes.map((node: any) => {
-                const cleanNode = { ...node };
-                // Remove potential runtime data
-                delete cleanNode.executionId;
-                delete cleanNode.executionData;
-                delete cleanNode.typeVersion; // Often read-only
+                const cleanNode = {
+                    id: node.id,
+                    name: node.name,
+                    type: node.type,
+                    typeVersion: node.typeVersion, // Required!
+                    position: node.position,
+                    parameters: node.parameters,
+                    credentials: node.credentials,
+                    disabled: node.disabled,
+                    notes: node.notes
+                };
+                // Remove undefined/null keys to be safe
+                Object.keys(cleanNode).forEach(key => (cleanNode as any)[key] === undefined && delete (cleanNode as any)[key]);
                 return cleanNode;
             });
         }
 
-        console.log(`Updating workflow ${id} with PUT (${payload.nodes.length} nodes)`);
-        console.log(`Payload tags: ${JSON.stringify(payload.tags)}`);
+        // 3. Settings cleaning
+        if (payload.settings) {
+            // Remove potentially read-only or problematic settings if any
+            // saveExecutionProgress is sometimes problematic, but usually allowed.
+            // If we want to be safe, we can leave it.
+            // delete payload.settings.saveExecutionProgress;
+        }
 
-        // Log payload snippet for debug
-        // console.log("Payload:", JSON.stringify(payload).slice(0, 500) + "...");
+        console.log(`Updating workflow ${id} with PUT (${payload.nodes?.length} nodes)`);
+        console.log(`Payload keys: ${Object.keys(payload).join(", ")}`);
 
         try {
             const result = await this.fetch<N8nWorkflow>(`/workflows/${id}`, {
