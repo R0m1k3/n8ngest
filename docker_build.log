@@ -1,0 +1,127 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.69kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:18-alpine
+#2 DONE 0.8s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 120B done
+#3 DONE 0.0s
+
+#4 [builder 1/5] WORKDIR /app
+#4 CACHED
+
+#5 [base 1/1] FROM docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
+#5 resolve docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e 0.0s done
+#5 CACHED
+
+#6 [internal] load build context
+#6 transferring context: 60.00kB 0.0s done
+#6 DONE 0.1s
+
+#7 [deps 1/4] RUN apk add --no-cache libc6-compat
+#7 ...
+
+#8 [runner 2/8] RUN addgroup --system --gid 1001 nodejs
+#8 DONE 0.3s
+
+#9 [runner 3/8] RUN adduser --system --uid 1001 nextjs
+#9 DONE 0.4s
+
+#7 [deps 1/4] RUN apk add --no-cache libc6-compat
+#7 0.287 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
+#7 0.745 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
+#7 1.081 (1/3) Installing musl-obstack (1.2.3-r2)
+#7 1.123 (2/3) Installing libucontext (1.3.2-r0)
+#7 1.164 (3/3) Installing gcompat (1.1.0-r4)
+#7 1.217 OK: 10 MiB in 20 packages
+#7 DONE 1.3s
+
+#10 [deps 2/4] WORKDIR /app
+#10 DONE 0.0s
+
+#11 [deps 3/4] COPY package.json package-lock.json* ./
+#11 DONE 0.0s
+
+#12 [deps 4/4] RUN npm ci
+#12 0.803 npm warn EBADENGINE Unsupported engine {
+#12 0.803 npm warn EBADENGINE   package: '@vercel/oidc@3.1.0',
+#12 0.803 npm warn EBADENGINE   required: { node: '>= 20' },
+#12 0.803 npm warn EBADENGINE   current: { node: 'v18.20.8', npm: '10.8.2' }
+#12 0.803 npm warn EBADENGINE }
+#12 0.806 npm warn EBADENGINE Unsupported engine {
+#12 0.806 npm warn EBADENGINE   package: 'next@16.1.4',
+#12 0.806 npm warn EBADENGINE   required: { node: '>=20.9.0' },
+#12 0.806 npm warn EBADENGINE   current: { node: 'v18.20.8', npm: '10.8.2' }
+#12 0.806 npm warn EBADENGINE }
+#12 15.36 
+#12 15.36 added 401 packages, and audited 402 packages in 15s
+#12 15.36 
+#12 15.36 149 packages are looking for funding
+#12 15.36   run `npm fund` for details
+#12 15.37 
+#12 15.37 found 0 vulnerabilities
+#12 15.37 npm notice
+#12 15.37 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+#12 15.37 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+#12 15.37 npm notice To update run: npm install -g npm@11.7.0
+#12 15.37 npm notice
+#12 DONE 15.9s
+
+#13 [builder 2/5] COPY --from=deps /app/node_modules ./node_modules
+#13 DONE 8.9s
+
+#14 [builder 3/5] COPY . .
+#14 DONE 0.4s
+
+#15 [builder 4/5] RUN npx prisma generate
+#15 1.063 prisma:warn Prisma failed to detect the libssl/openssl version to use, and may not work as expected. Defaulting to "openssl-1.1.x".
+#15 1.063 Please manually install OpenSSL and try installing Prisma again.
+#15 2.357 Environment variables loaded from .env
+#15 2.359 Prisma schema loaded from prisma/schema.prisma
+#15 2.370 prisma:warn Prisma failed to detect the libssl/openssl version to use, and may not work as expected. Defaulting to "openssl-1.1.x".
+#15 2.370 Please manually install OpenSSL and try installing Prisma again.
+#15 3.723 
+#15 3.723 ✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 84ms
+#15 3.723 
+#15 3.723 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#15 3.723 
+#15 3.723 Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+#15 3.723 
+#15 3.929 npm notice
+#15 3.929 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+#15 3.929 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+#15 3.929 npm notice To update run: npm install -g npm@11.7.0
+#15 3.929 npm notice
+#15 DONE 4.0s
+
+#16 [builder 5/5] RUN npm run build
+#16 0.535 
+#16 0.535 > n8n-orchestrator@0.1.0 build
+#16 0.535 > next build
+#16 0.535 
+#16 0.658 You are using Node.js 18.20.8. For Next.js, Node.js version ">=20.9.0" is required.
+#16 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [builder 5/5] RUN npm run build:
+0.535 
+0.535 > n8n-orchestrator@0.1.0 build
+0.535 > next build
+0.535 
+0.658 You are using Node.js 18.20.8. For Next.js, Node.js version ">=20.9.0" is required.
+------
+
+ [33m1 warning found (use docker --debug to expand):
+[0m - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 22)
+Dockerfile:27
+--------------------
+  25 |     RUN npx prisma generate
+  26 |     
+  27 | >>> RUN npm run build
+  28 |     
+  29 |     # Production image, copy all the files and run next
+--------------------
+ERROR: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
