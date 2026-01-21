@@ -10,6 +10,7 @@ export async function GET() {
         // In a real app we might want to return masked values for secrets
         return NextResponse.json(configs);
     } catch (error) {
+        console.error("Settings GET Error:", error);
         return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
     }
 }
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
+        console.error("Settings POST Error:", error);
         return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
     }
 }
