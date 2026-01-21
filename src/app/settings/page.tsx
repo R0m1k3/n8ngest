@@ -14,8 +14,7 @@ interface ConfigItem {
 const DEFAULT_KEYS = [
     { key: "N8N_API_URL", label: "n8n API URL", placeholder: "http://host.docker.internal:5678" },
     { key: "N8N_API_KEY", label: "n8n API Key", placeholder: "your-n8n-api-key", secret: true },
-    { key: "AI_BASE_URL", label: "AI Base URL", placeholder: "https://openrouter.ai/api/v1" },
-    { key: "AI_API_KEY", label: "AI API Key", placeholder: "sk-or-...", secret: true },
+    { key: "AI_API_KEY", label: "OpenRouter API Key", placeholder: "sk-or-...", secret: true },
     { key: "AI_MODEL", label: "AI Model", placeholder: "anthropic/claude-3-sonnet" },
 ];
 

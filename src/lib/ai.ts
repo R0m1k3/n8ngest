@@ -3,8 +3,8 @@ import { configService } from "./config";
 
 // Helper to get dynamic client
 export async function getAiClient() {
-    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY || "ollama";
-    const baseURL = await configService.get("AI_BASE_URL") || process.env.AI_BASE_URL || "http://host.docker.internal:11434/v1";
+    const apiKey = await configService.get("AI_API_KEY") || process.env.AI_API_KEY;
+    const baseURL = "https://openrouter.ai/api/v1";
 
     return new OpenAI({
         apiKey,
