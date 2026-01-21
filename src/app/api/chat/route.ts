@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { bmadService } from "@/lib/bmad";
 import { configService } from "@/lib/config";
+import { n8nClient } from "@/lib/n8n";
 
 export const runtime = "nodejs";
 
@@ -25,26 +26,50 @@ export async function POST(req: Request) {
         }
     });
 
-    let systemPrompt = `You are n8n-orchestrator, an AI assistant dedicated to helping users build and manage n8n workflows.
-You have access to n8n API definitions and can generate JSON workflows.
-Always answer in Markdown.
-If the user asks to create a workflow, provide the JSON code block.`;
+    // Fetch real n8n workflows to provide context
+    let workflowContext = "";
+    try {
+        const workflows = await n8nClient.getWorkflows();
+        if (workflows && workflows.length > 0) {
+            workflowContext = `
+## WORKFLOWS N8N DISPONIBLES (${workflows.length} total):
+${workflows.map(w => `- **${w.name}** (ID: ${w.id}) - ${w.active ? "✅ Actif" : "❌ Inactif"}`).join("\n")}
+`;
+        } else {
+            workflowContext = "\n## AUCUN WORKFLOW N8N TROUVÉ\nVérifiez la configuration N8N_API_URL et N8N_API_KEY dans les paramètres.\n";
+        }
+    } catch (error) {
+        console.error("Failed to fetch n8n workflows:", error);
+        workflowContext = "\n## ⚠️ IMPOSSIBLE DE RÉCUPÉRER LES WORKFLOWS N8N\nErreur de connexion à l'API n8n. Vérifiez la configuration.\n";
+    }
+
+    let systemPrompt = `Tu es n8n-orchestrator, un assistant IA dédié à aider les utilisateurs à créer et gérer des workflows n8n.
+Tu as accès aux définitions de l'API n8n et tu peux générer des workflows JSON.
+Tu réponds TOUJOURS en français.
+Utilise le Markdown pour formater tes réponses.
+Si l'utilisateur demande de créer un workflow, fournis le code JSON dans un bloc de code.
+
+${workflowContext}
+
+Tu peux référencer ces workflows par leur nom ou ID lorsque l'utilisateur pose des questions.`;
 
     if (agentId) {
         const agent = await bmadService.getAgent(agentId);
         if (agent) {
             console.log(`Injecting Agent Persona: ${agent.name}`);
             systemPrompt = `
---- BMAD AGENT ACTIVATION ---
-NAME: ${agent.name}
+--- ACTIVATION AGENT BMAD ---
+NOM: ${agent.name}
 DESCRIPTION: ${agent.description}
 
 INSTRUCTIONS/PERSONA:
 ${agent.content}
 
---- END AGENT DEFINITION ---
+--- FIN DÉFINITION AGENT ---
 
-You must embody this agent.
+Tu dois incarner cet agent. Tu réponds TOUJOURS en français.
+
+${workflowContext}
 `;
         }
     }
@@ -95,4 +120,5 @@ You must embody this agent.
         return new Response(`Error: ${message}`, { status: 500 });
     }
 }
+
 
