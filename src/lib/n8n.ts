@@ -113,10 +113,15 @@ export class N8nClient {
                     (n) => n.name === newNode.name || n.id === newNode.id
                 );
                 if (existingIndex >= 0) {
-                    // Merge node parameters
+                    // Merge node parameters but PROTECT identity fields
                     mergedNodes[existingIndex] = {
                         ...mergedNodes[existingIndex],
                         ...newNode,
+                        // Force preserve critical fields to prevent AI hallucinations from breaking the node
+                        id: mergedNodes[existingIndex].id,
+                        type: mergedNodes[existingIndex].type,
+                        typeVersion: mergedNodes[existingIndex].typeVersion,
+                        position: mergedNodes[existingIndex].position,
                         parameters: {
                             ...mergedNodes[existingIndex].parameters,
                             ...newNode.parameters,
