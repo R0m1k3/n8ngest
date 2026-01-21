@@ -67,11 +67,57 @@ export class N8nClient {
 
     /**
      * Update an existing workflow
+     * n8n requires PUT with the complete workflow, not partial PATCH
+     * So we first GET the workflow, merge changes, then PUT it back
      */
     async updateWorkflow(id: string, data: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
+        // First, get the current workflow
+        const currentWorkflow = await this.getWorkflow(id);
+
+        // Merge the changes into the current workflow
+        const updatedWorkflow = {
+            ...currentWorkflow,
+            ...data,
+        };
+
+        // If nodes are being updated, merge them by name/id
+        if (data.nodes && Array.isArray(data.nodes)) {
+            const mergedNodes = [...currentWorkflow.nodes];
+            for (const newNode of data.nodes) {
+                const existingIndex = mergedNodes.findIndex(
+                    (n) => n.name === newNode.name || n.id === newNode.id
+                );
+                if (existingIndex >= 0) {
+                    // Merge node parameters
+                    mergedNodes[existingIndex] = {
+                        ...mergedNodes[existingIndex],
+                        ...newNode,
+                        parameters: {
+                            ...mergedNodes[existingIndex].parameters,
+                            ...newNode.parameters,
+                        },
+                    };
+                } else {
+                    // Add new node
+                    mergedNodes.push(newNode);
+                }
+            }
+            updatedWorkflow.nodes = mergedNodes;
+        }
+
+        // If connections are being updated, merge them
+        if (data.connections) {
+            updatedWorkflow.connections = {
+                ...currentWorkflow.connections,
+                ...data.connections,
+            };
+        }
+
+        console.log(`Updating workflow ${id} with PUT (${updatedWorkflow.nodes.length} nodes)`);
+
         return await this.fetch<N8nWorkflow>(`/workflows/${id}`, {
-            method: "PATCH",
-            body: JSON.stringify(data),
+            method: "PUT",
+            body: JSON.stringify(updatedWorkflow),
         });
     }
 
