@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState, FormEvent, useRef } from "react";
 import { Bot, User, Send, Settings, Check, Copy, Menu, X } from "lucide-react";
 import Link from "next/link";
