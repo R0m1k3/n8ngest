@@ -30,12 +30,21 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Force cast options and return to avoid build errors with mismatched SDK versions
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+  // Configure useChat with explicit API endpoint
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
+    api: "/api/chat",
     body: {
       agentId: selectedAgent,
     },
-  } as any) as any;
+    onError: (err) => {
+      console.error("Chat Error:", err);
+    },
+  });
+
+  // Debug: log when input changes
+  useEffect(() => {
+    console.log("useChat state:", { input, messagesCount: messages?.length, isLoading, error });
+  }, [input, messages, isLoading, error]);
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
