@@ -148,9 +148,7 @@ export class N8nClient {
             settings: updatedWorkflow.settings,
             staticData: updatedWorkflow.staticData,
             tags: updatedWorkflow.tags,
-            // We handle activation separately, but n8n spec might allow it here too. 
-            // Since we deactivate manually, we set it to false here to be safe/consistent.
-            active: false
+            // active field is read-only in PUT, handled separately via activateWorkflow
         };
 
         // 1. Tags must be an array of IDs, not objects
