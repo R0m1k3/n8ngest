@@ -71,10 +71,10 @@ export class N8nClient {
         });
     }
 
-    async createWorkflow(name: string, nodes: any[] = [], connections: any = {}): Promise<N8nWorkflow> {
+    async createWorkflow(name: string, nodes: any[] = [], connections: any = {}, settings: any = {}): Promise<N8nWorkflow> {
         return await this.fetch<N8nWorkflow>("/workflows", {
             method: "POST",
-            body: JSON.stringify({ name, nodes, connections }),
+            body: JSON.stringify({ name, nodes, connections, settings }),
         });
     }
 
