@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, FormEvent, useRef } from "react";
-import { Bot, User, Send, Settings } from "lucide-react";
+import { Bot, User, Send, Settings, Check, Copy } from "lucide-react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 
 function classNames(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -19,6 +23,56 @@ interface Message {
   role: "user" | "assistant";
   content: string;
 }
+
+const CodeBlock = ({ inline, className, children, ...props }: any) => {
+  const match = /language-(\w+)/.exec(className || "");
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(String(children).replace(/\n$/, ""));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!inline && match) {
+    return (
+      <div className="relative group rounded-md overflow-hidden my-4">
+        <div className="flex items-center justify-between bg-zinc-700 px-4 py-2 text-xs text-zinc-200">
+          <span className="font-mono">{match[1]}</span>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 hover:text-white transition-colors"
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-green-400" /> Copié
+              </>
+            ) : (
+              <>
+                <Copy size={14} /> Copier
+              </>
+            )}
+          </button>
+        </div>
+        <SyntaxHighlighter
+          style={oneDark}
+          language={match[1]}
+          PreTag="div"
+          customStyle={{ margin: 0, borderRadius: "0 0 0.375rem 0.375rem" }}
+          {...props}
+        >
+          {String(children).replace(/\n$/, "")}
+        </SyntaxHighlighter>
+      </div>
+    );
+  }
+
+  return (
+    <code className={classNames("bg-slate-800 rounded px-1 py-0.5", className)} {...props}>
+      {children}
+    </code>
+  );
+};
 
 export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -234,86 +288,92 @@ export default function ChatPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
-          {messages.length === 0 && !isLoading && !error && (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-              <Bot size={48} className="mb-4 text-slate-700" />
-              <p className="text-lg font-medium">Ready to orchestrate.</p>
-              <p className="text-sm">Select an agent or start typing to create a workflow.</p>
+      <div className="flex-1 flex flex-col relative">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
+              <Bot size={48} className="opacity-20" />
+              <p>Sélectionnez un agent ou commencez à discuter pour gérer vos workflows n8n.</p>
             </div>
-          )}
-
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={classNames(
-                "flex gap-4 max-w-4xl mx-auto",
-                m.role === "user" ? "justify-end" : "justify-start"
-              )}
-            >
+          ) : (
+            messages.map((message) => (
               <div
+                key={message.id}
                 className={classNames(
-                  "p-4 rounded-xl max-w-[80%] shadow-sm whitespace-pre-wrap",
-                  m.role === "user"
-                    ? "bg-orange-600 text-white rounded-br-none"
-                    : "bg-slate-800 border border-slate-700 text-slate-200 rounded-bl-none"
+                  "flex gap-4 p-4 rounded-lg max-w-3xl",
+                  message.role === "assistant" ? "bg-slate-900 mx-auto" : "bg-slate-800 ml-auto"
                 )}
               >
-                <div className="flex items-center gap-2 mb-2 opacity-50 text-xs uppercase font-bold tracking-wider">
-                  {m.role === "user" ? <User size={12} /> : <Bot size={12} />}
-                  {m.role === "user" ? "You" : selectedAgent || "Assistant"}
+                <div className="flex-shrink-0 mt-1">
+                  {message.role === "assistant" ? (
+                    <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
+                      <Bot size={20} className="text-white" />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center">
+                      <User size={20} className="text-white" />
+                    </div>
+                  )}
                 </div>
-                {m.content || (isLoading && m.role === "assistant" ? "..." : "")}
+                <div className="flex-1 min-w-0 prose prose-invert max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code: CodeBlock,
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
               </div>
-            </div>
-          ))}
-
-          {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-            <div className="flex gap-4 max-w-4xl mx-auto">
-              <div className="p-4 bg-slate-800 border border-slate-700 rounded-xl rounded-bl-none animate-pulse">
-                <span className="w-2 h-2 bg-slate-500 rounded-full inline-block mx-1 animate-bounce"></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full inline-block mx-1 animate-bounce delay-75"></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full inline-block mx-1 animate-bounce delay-150"></span>
+            ))
+          )}
+          {isLoading && (
+            <div className="flex gap-4 p-4 rounded-lg max-w-3xl mx-auto bg-slate-900">
+              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center animate-pulse">
+                <Bot size={20} className="text-white" />
+              </div>
+              <div className="flex items-center gap-2 text-slate-400">
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
               </div>
             </div>
           )}
-
           {error && (
-            <div className="p-4 bg-red-900/50 border border-red-700 rounded-xl max-w-4xl mx-auto text-red-200">
+            <div className="p-4 bg-red-900/50 border border-red-800 text-red-200 rounded-lg max-w-3xl mx-auto">
               Error: {error}
             </div>
           )}
-
           <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800">
-          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex gap-4 relative">
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-950/80 backdrop-blur-sm border-t border-slate-800">
+          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative">
             <input
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-slate-600"
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe a workflow to create..."
+              placeholder="Décrivez le workflow que vous souhaitez créer ou modifier..."
+              className="w-full bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500 rounded-xl pr-12 py-4 shadow-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all"
+              disabled={isLoading}
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="absolute right-2 top-2 bottom-2 aspect-square bg-orange-600 hover:bg-orange-500 text-white rounded-md flex items-center justify-center transition-all disabled:opacity-50 disabled:hover:bg-orange-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-orange-600 text-white rounded-lg hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Send size={18} />
             </button>
           </form>
           <div className="text-center mt-2">
-            <span className="text-[10px] text-slate-600">
-              Powered by n8n Orchestrator • OpenRouter AI
-            </span>
+            <p className="text-xs text-slate-500">
+              Powered by OpenRouter & n8n API • {messages.length > 0 ? `${messages.length} messages` : "Ready"}
+            </p>
           </div>
         </div>
       </div>
     </div>
   );
-}
 
