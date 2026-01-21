@@ -84,8 +84,20 @@ export class N8nClient {
      * So we first GET the workflow, merge changes, then PUT it back
      */
     async updateWorkflow(id: string, data: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
+        console.log(`[DEBUG_BUILD_1780] Starting update for workflow ${id}`);
+
         // First, get the current workflow
         const currentWorkflow = await this.getWorkflow(id);
+        const wasActive = currentWorkflow.active;
+
+        if (wasActive) {
+            console.log(`Workflow ${id} is active. Deactivating before update...`);
+            try {
+                await this.activateWorkflow(id, false);
+            } catch (e) {
+                console.warn("Failed to deactivate workflow, trying update anyway:", e);
+            }
+        }
 
         // Merge the changes into the current workflow
         const updatedWorkflow = {
@@ -127,8 +139,12 @@ export class N8nClient {
         }
 
         // Sanitize payload for n8n API
-        // 1. Tags must be an array of IDs, not objects
         const payload: any = { ...updatedWorkflow };
+
+        // Ensure payload says it is inactive (since we deactivated it)
+        payload.active = false;
+
+        // 1. Tags must be an array of IDs, not objects
         if (Array.isArray(payload.tags)) {
             payload.tags = payload.tags.map((t: any) => typeof t === 'object' && t.id ? t.id : t);
         }
@@ -138,6 +154,7 @@ export class N8nClient {
         delete payload.updatedAt;
         delete payload.versionId; // Important: versionId cannot be updated manually
         delete payload.pinData;   // Can cause issues if too large or malformed
+        delete payload.settings?.saveExecutionProgress; // Sometimes causes issues
 
         // n8n API sometimes rejects 'active' in PUT if it's already active (requires separate endpoint usually)
         // But for now let's try keeping it consistent or removing if it causes issues.
@@ -151,6 +168,7 @@ export class N8nClient {
                 // Remove potential runtime data
                 delete cleanNode.executionId;
                 delete cleanNode.executionData;
+                delete cleanNode.typeVersion; // Often read-only
                 return cleanNode;
             });
         }
@@ -161,10 +179,27 @@ export class N8nClient {
         // Log payload snippet for debug
         // console.log("Payload:", JSON.stringify(payload).slice(0, 500) + "...");
 
-        return await this.fetch<N8nWorkflow>(`/workflows/${id}`, {
-            method: "PUT",
-            body: JSON.stringify(payload),
-        });
+        try {
+            const result = await this.fetch<N8nWorkflow>(`/workflows/${id}`, {
+                method: "PUT",
+                body: JSON.stringify(payload),
+            });
+
+            if (wasActive) {
+                console.log(`Re-activating workflow ${id}...`);
+                await this.activateWorkflow(id, true);
+                result.active = true;
+            }
+
+            return result;
+        } catch (error) {
+            // Try to reactivate if update failed
+            if (wasActive) {
+                console.log(`Update failed, ensuring workflow ${id} is re-activated...`);
+                await this.activateWorkflow(id, true).catch(() => { });
+            }
+            throw error;
+        }
     }
 
     /**
