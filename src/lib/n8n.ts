@@ -178,6 +178,11 @@ export class N8nClient {
         }
 
         // 3. Settings cleaning strict allowlist
+        // Ensure settings exists (n8n requires it)
+        if (!payload.settings) {
+            payload.settings = {};
+        }
+
         if (payload.settings) {
             const validSettings = [
                 'defaultData',
